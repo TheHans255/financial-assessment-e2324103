@@ -61,7 +61,7 @@ pub struct OutputRow {
     pub available: f64,
     pub held: f64,
     pub total: f64,
-    pub frozen: bool,
+    pub locked: bool,
 }
 
 impl From<Account> for OutputRow {
@@ -71,7 +71,7 @@ impl From<Account> for OutputRow {
             available: (account.available_balance as f64) / 10000.0,
             held: (account.held_balance as f64) / 10000.0,
             total: (account.available_balance as f64 + account.held_balance as f64) / 10000.0,
-            frozen: account.is_frozen,
+            locked: account.is_frozen,
         }
     }
 }
