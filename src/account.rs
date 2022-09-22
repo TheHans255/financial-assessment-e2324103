@@ -13,7 +13,8 @@ pub struct Account {
     /// The account's current held balance. Held balance relates to
     /// disputed transactions
     pub held_balance: u64,
-    /// The total list of transactions this account has experienced
+    /// The total list of transactions this account has experienced,
+    /// allowing us to later resolve disputes
     pub transactions: HashMap<u32, Transaction>,
     /// Whether the account has been frozen. An account is a frozen
     /// if a chargeback has been processed on it
@@ -51,7 +52,15 @@ impl Account {
                         self.available_balance = result;
                         self.transactions.insert(transaction.id, transaction);
                     },
-                    None => panic!("Account balance overflow")
+                    None => {
+                        // The account balance can overflow if we go over 1.84 quintillion
+                        // currency units. As this is 10,000 times more than the current global
+                        // GDP in USD, a proper response to this error will be a system update
+                        // should this amount ever be reached.
+                        // TODO: This should probably actually be replaced with a Bignum implementation,
+                        // since that would allow balances to grow as large or as small as we please.
+                        panic!("Account balance overflow")
+                    }
                 }
             },
             TransactionType::Withdrawal => {
@@ -75,7 +84,8 @@ impl Account {
                         match self.available_balance.checked_sub(transaction.amount) {
                             Some(result) => {
                                 self.available_balance = result;
-                                self.held_balance = self.held_balance.checked_add(transaction.amount).unwrap();
+                                self.held_balance = self.held_balance.checked_add(transaction.amount)
+                                    .expect("Held balance overflow");
                                 transaction.dispute_state = DisputeState::Disputed;
                             },
                             None => {
@@ -109,10 +119,13 @@ impl Account {
                         match self.held_balance.checked_sub(transaction.amount) {
                             Some(result) => {
                                 self.held_balance = result;
-                                self.available_balance = self.available_balance.checked_add(transaction.amount).unwrap();
+                                self.available_balance = self.available_balance.checked_add(transaction.amount)
+                                    .expect("Available balance overflow");
                                 transaction.dispute_state = DisputeState::Undisputed;
                             },
-                            None => { 
+                            None => {
+                                // Because the held balance is always the exact sum of the deposit balances
+                                // of all transactions currently under dispute, it should never go below zero
                                 panic!("Held balance taken below zero - this should not happen");
                             }
                         }
@@ -137,7 +150,9 @@ impl Account {
                                 self.is_frozen = true;
                                 transaction.dispute_state = DisputeState::ChargedBack;
                             },
-                            None => { 
+                            None => {
+                                // Because the held balance is always the exact sum of the deposit balances
+                                // of all transactions currently under dispute, it should never go below zero
                                 panic!("Held balance taken below zero - this should not happen");
                             }
                         }
