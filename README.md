@@ -75,3 +75,11 @@ to ignore all future deposits and withdrawals (though disputes are still availab
   withdrawals cannot be disputed (since there is no additional balance that is available
   to rectify them), and deposits cannot be disputed if there are not enough available
   funds remaining.
+
+# Testing/Correctness
+
+- Account functions and CSV input/output functions are unit tested, including
+  state management, dispute resolution, and number conversion
+- BigDecimal is used to ensure numerical correctness and prevent rounding errors.
+- A handful of test files are used for integration testing. A Node.js script, `stress_gen.js`,
+  is also provided to generate a long list of transactions and ensure stability.
