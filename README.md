@@ -66,13 +66,10 @@ to ignore all future deposits and withdrawals (though disputes are still availab
 
 # Error Conditions and Edge Cases
 
-- If a deposit causes an overflow of the available balance (a 64-bit unsigned integer
-  representing the number of 1/10000th currency units), the application will panic.
-  This should be taken as an indication that either a transaction is erroneously
-  recorded or that our current system is insufficient for processing funds, though since
-  this would require a balance of 1.84 quintillion currency units (1.84e15),
-  which is 10,000 times more than the current global GDP in USD, the latter case can
-  be considered unlikely in the foreseeable future.
+- Balances use the BigDecimal crates, which allow an arbitrary number of integer digits
+  but only allows up to 2^63 possible decimal places, leading to a maximum mantissa
+  of 10^2^63. Since there are only 10^186 Planck length cubes in the area of the observable
+  universe, it is unlikely that this solution would overflow in real-world usage.
 - If a withdrawal is ordered for more money than is available, the withdrawal is ignored.
 - As per the business requirements, withdrawals process instantly. Because of this,
   withdrawals cannot be disputed (since there is no additional balance that is available

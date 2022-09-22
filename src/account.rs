@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use bigdecimal::BigDecimal;
+use num_traits::Zero;
 
 use crate::transaction::{Transaction, TransactionType, DisputeState};
 
@@ -9,10 +11,10 @@ pub struct Account {
     pub id: u16,
     /// The account's current available balance. Available balance 
     /// can be utilized for withdrawals.
-    pub available_balance: u64,
+    pub available_balance: BigDecimal,
     /// The account's current held balance. Held balance relates to
     /// disputed transactions
-    pub held_balance: u64,
+    pub held_balance: BigDecimal,
     /// The total list of transactions this account has experienced,
     /// allowing us to later resolve disputes
     pub transactions: HashMap<u32, Transaction>,
@@ -26,8 +28,8 @@ impl Account {
     pub fn new(id: u16) -> Self {
         Self {
             id, 
-            available_balance: 0,
-            held_balance: 0,
+            available_balance: Zero::zero(),
+            held_balance: Zero::zero(),
             transactions: HashMap::new(),
             is_frozen: false
         }
@@ -47,29 +49,13 @@ impl Account {
 
         match transaction.transaction_type {
             TransactionType::Deposit => {
-                match self.available_balance.checked_add(transaction.amount) {
-                    Some(result) => { 
-                        self.available_balance = result;
-                        self.transactions.insert(transaction.id, transaction);
-                    },
-                    None => {
-                        // The account balance can overflow if we go over 1.84 quintillion
-                        // currency units. As this is 10,000 times more than the current global
-                        // GDP in USD, a proper response to this error will be a system update
-                        // should this amount ever be reached.
-                        // TODO: This should probably actually be replaced with a Bignum implementation,
-                        // since that would allow balances to grow as large or as small as we please.
-                        panic!("Account balance overflow")
-                    }
-                }
+                self.available_balance += &transaction.amount;
+                self.transactions.insert(transaction.id, transaction);
             },
             TransactionType::Withdrawal => {
-                match self.available_balance.checked_sub(transaction.amount) {
-                    Some(result) => { 
-                        self.available_balance = result;
-                        self.transactions.insert(transaction.id, transaction);
-                    },
-                    None => { /* do not process an overdraw */ }
+                if transaction.amount <= self.available_balance {
+                    self.available_balance -= &transaction.amount;
+                    self.transactions.insert(transaction.id, transaction);
                 }
             }
         }
@@ -81,21 +67,13 @@ impl Account {
             if transaction.dispute_state == DisputeState::Undisputed {
                 match transaction.transaction_type {
                     TransactionType::Deposit => {
-                        match self.available_balance.checked_sub(transaction.amount) {
-                            Some(result) => {
-                                self.available_balance = result;
-                                self.held_balance = self.held_balance.checked_add(transaction.amount)
-                                    .expect("Held balance overflow");
-                                transaction.dispute_state = DisputeState::Disputed;
-                            },
-                            None => {
-                                // do not process if there are not enough available funds - this can happen
-                                // if a person deposits money, withdraws some of that money, then disputes
-                                // the original deposit
-                                // NOTE: I'm not sure this is the correct behavior - ideally we would hold
-                                // as much as we can and keep track of a deficit that we would need to manually
-                                // supply from elsewhere to make things right.
-                            }
+                        // do not process if there are not enough available funds - this can happen
+                        // if a person deposits money, withdraws some of that money, then disputes
+                        // the original deposit
+                        if transaction.amount <= self.available_balance {
+                            self.available_balance -= &transaction.amount;
+                            self.held_balance += &transaction.amount;
+                            transaction.dispute_state = DisputeState::Disputed;
                         }
                     },
                     TransactionType::Withdrawal => {
@@ -116,18 +94,14 @@ impl Account {
             if transaction.dispute_state == DisputeState::Disputed {
                 match transaction.transaction_type {
                     TransactionType::Deposit => {
-                        match self.held_balance.checked_sub(transaction.amount) {
-                            Some(result) => {
-                                self.held_balance = result;
-                                self.available_balance = self.available_balance.checked_add(transaction.amount)
-                                    .expect("Available balance overflow");
-                                transaction.dispute_state = DisputeState::Undisputed;
-                            },
-                            None => {
-                                // Because the held balance is always the exact sum of the deposit balances
-                                // of all transactions currently under dispute, it should never go below zero
-                                panic!("Held balance taken below zero - this should not happen");
-                            }
+                        if transaction.amount <= self.held_balance {
+                            self.held_balance -= &transaction.amount;
+                            self.available_balance += &transaction.amount;
+                            transaction.dispute_state = DisputeState::Undisputed;
+                        } else {
+                            // Because the held balance is always the exact sum of the deposit balances
+                            // of all transactions currently under dispute, it should never go below zero
+                            panic!("Held balance taken below zero - this should not happen");
                         }
                     },
                     TransactionType::Withdrawal => {
@@ -144,17 +118,14 @@ impl Account {
             if transaction.dispute_state == DisputeState::Disputed {
                 match transaction.transaction_type {
                     TransactionType::Deposit => {
-                        match self.held_balance.checked_sub(transaction.amount) {
-                            Some(result) => {
-                                self.held_balance = result;
-                                self.is_frozen = true;
-                                transaction.dispute_state = DisputeState::ChargedBack;
-                            },
-                            None => {
-                                // Because the held balance is always the exact sum of the deposit balances
-                                // of all transactions currently under dispute, it should never go below zero
-                                panic!("Held balance taken below zero - this should not happen");
-                            }
+                        if transaction.amount <= self.held_balance {
+                            self.held_balance -= &transaction.amount;
+                            self.is_frozen = true;
+                            transaction.dispute_state = DisputeState::ChargedBack;
+                        } else {
+                            // Because the held balance is always the exact sum of the deposit balances
+                            // of all transactions currently under dispute, it should never go below zero
+                            panic!("Held balance taken below zero - this should not happen");
                         }
                     },
                     TransactionType::Withdrawal => {

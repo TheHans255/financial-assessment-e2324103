@@ -1,3 +1,5 @@
+use bigdecimal::BigDecimal;
+
 /// The type of transaction being executed, either a deposit or withdrawal
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum TransactionType {
@@ -28,7 +30,7 @@ pub enum DisputeActionType {
 }
 
 /// A structure representing a transaction
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Transaction {
     /// A globally unique transaction ID
     pub id: u32,
@@ -36,7 +38,7 @@ pub struct Transaction {
     pub client_id: u16,
     /// The amount of the transaction in 1/10000 currency units
     /// (this is used instead of f64 to avoid rounding errors)
-    pub amount: u64,
+    pub amount: BigDecimal,
     /// Whether the transaction is a deposit or a withdrawal
     pub transaction_type: TransactionType,
     /// Whether a transaction is OK, under dispute, or charged back
