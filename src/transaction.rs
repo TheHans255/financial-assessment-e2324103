@@ -1,14 +1,14 @@
 use bigdecimal::BigDecimal;
 
 /// The type of transaction being executed, either a deposit or withdrawal
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TransactionType {
     Deposit,
     Withdrawal
 }
 
 /// The state of dispute a transaction is in
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DisputeState {
     /// The transaction has either never been disputed, or has been disputed or resolved
     Undisputed,
@@ -19,7 +19,7 @@ pub enum DisputeState {
 }
 
 /// A state transition for a transaction dispute
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DisputeActionType {
     /// Take an undisputed transaction into dispute
     Dispute,
@@ -30,7 +30,7 @@ pub enum DisputeActionType {
 }
 
 /// A structure representing a transaction
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
     /// A globally unique transaction ID
     pub id: u32,
@@ -47,7 +47,7 @@ pub struct Transaction {
 
 /// A structure representing a change in the dispute state for
 /// a transaction
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct DisputeAction {
     /// The desired action for the transaction
     pub action_type: DisputeActionType,

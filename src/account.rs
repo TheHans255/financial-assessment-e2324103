@@ -4,7 +4,7 @@ use num_traits::Zero;
 
 use crate::transaction::{Transaction, TransactionType, DisputeState};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 /// Structure for tracking account state
 pub struct Account {
     /// The unique ID of the account
@@ -134,5 +134,311 @@ impl Account {
                 }
             }
         }        
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn creates_with_zero_balance() {
+        let account = Account::new(1);
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&Zero::zero()));
+        assert!(&(account.held_balance).eq(&Zero::zero()));
+        assert!(&account.transactions.is_empty());
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn records_deposit() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&10.into()));
+        assert!(&(account.held_balance).eq(&Zero::zero()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn records_withdrawal() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.register_transaction(Transaction
+            {
+                id: 2,
+                client_id: 1,
+                amount: 8.into(),
+                transaction_type: TransactionType::Withdrawal,
+                dispute_state: DisputeState::Undisputed,
+            });
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&2.into()));
+        assert!(&(account.held_balance).eq(&Zero::zero()));
+        assert_eq!(account.transactions.len(), 2 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn records_multiple_transactions() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.register_transaction(Transaction
+            {
+                id: 3,
+                client_id: 1,
+                amount: 15.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.register_transaction(Transaction
+            {
+                id: 2,
+                client_id: 1,
+                amount: 4.into(),
+                transaction_type: TransactionType::Withdrawal,
+                dispute_state: DisputeState::Undisputed,
+            });
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&21.into()));
+        assert!(&(account.held_balance).eq(&Zero::zero()));
+        assert_eq!(account.transactions.len(), 3 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn ignores_duplicate_transaction_numbers() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 12.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&12.into()));
+        assert!(&(account.held_balance).eq(&Zero::zero()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn records_dispute() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.dispute_transaction(1);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&0.into()));
+        assert!(&(account.held_balance).eq(&10.into()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn records_dispute_resolution() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.dispute_transaction(1);
+        account.resolve_disputed_transaction(1);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&10.into()));
+        assert!(&(account.held_balance).eq(&0.into()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn records_dispute_chargeback() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.dispute_transaction(1);
+        account.chargeback_disputed_transaction(1);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&0.into()));
+        assert!(&(account.held_balance).eq(&0.into()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(account.is_frozen);
+    }
+
+    #[test]
+    fn disallows_further_transactions_after_chargeback() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.dispute_transaction(1);
+        account.chargeback_disputed_transaction(1);
+        account.register_transaction(Transaction
+            {
+                id: 2,
+                client_id: 1,
+                amount: 15.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&0.into()));
+        assert!(&(account.held_balance).eq(&0.into()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(account.is_frozen);
+    }
+
+    #[test]
+    fn allows_further_disputes_after_chargeback() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.register_transaction(Transaction
+            {
+                id: 2,
+                client_id: 1,
+                amount: 15.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.dispute_transaction(1);
+        account.chargeback_disputed_transaction(1);
+        account.dispute_transaction(2);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&0.into()));
+        assert!(&(account.held_balance).eq(&15.into()));
+        assert_eq!(account.transactions.len(), 2 as usize);
+        assert!(account.is_frozen);
+    }
+
+    #[test]
+    fn ignores_resolve_on_undisputed() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.resolve_disputed_transaction(1);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&10.into()));
+        assert!(&(account.held_balance).eq(&0.into()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn ignores_chargeback_on_undisputed() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.chargeback_disputed_transaction(1);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&10.into()));
+        assert!(&(account.held_balance).eq(&0.into()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
+    }
+
+    #[test]
+    fn ignores_disputes_on_unknown_transaction_numbers() {
+        let mut account = Account::new(1);
+        account.register_transaction(Transaction
+            {
+                id: 1,
+                client_id: 1,
+                amount: 10.into(),
+                transaction_type: TransactionType::Deposit,
+                dispute_state: DisputeState::Undisputed,
+            });
+        account.dispute_transaction(2);
+        account.resolve_disputed_transaction(2);
+        account.chargeback_disputed_transaction(2);
+
+        assert_eq!(account.id, 1);
+        assert!(&(account.available_balance).eq(&10.into()));
+        assert!(&(account.held_balance).eq(&Zero::zero()));
+        assert_eq!(account.transactions.len(), 1 as usize);
+        assert!(!account.is_frozen);
     }
 }

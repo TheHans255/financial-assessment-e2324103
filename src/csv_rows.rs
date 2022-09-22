@@ -15,6 +15,7 @@ pub struct InputRow {
     pub amount: Option<BigDecimal>,
 }
 
+#[derive(Debug)]
 /// Simple enum type for parse errors
 pub enum InputRowParseErr {
     UnknownType,
@@ -87,5 +88,95 @@ impl From<Account> for OutputRow {
             held: account.held_balance,
             locked: account.is_frozen,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn transaction_row_converts_to_transaction() {
+        let input_row = InputRow {
+            transaction_type: "deposit".to_string(),
+            client: 1,
+            tx: 1,
+            amount: Some(12.into()),
+        };
+        let transaction: Transaction = input_row.try_into().expect("Parse failed");
+        assert_eq!(transaction.transaction_type, TransactionType::Deposit);
+        assert_eq!(transaction.client_id, 1);
+        assert_eq!(transaction.id, 1);
+        assert_eq!(transaction.amount, 12.into());
+        assert_eq!(transaction.dispute_state, DisputeState::Undisputed);
+    }
+
+    #[test]
+    fn dispute_row_converts_to_dispute() {
+        let input_row = InputRow {
+            transaction_type: "dispute".to_string(),
+            client: 1,
+            tx: 1,
+            amount: None,
+        };
+        let dispute_action: DisputeAction = input_row.try_into().expect("Parse failed");
+        assert_eq!(dispute_action.action_type, DisputeActionType::Dispute);
+        assert_eq!(dispute_action.client_id, 1);
+        assert_eq!(dispute_action.transaction_id, 1);
+    }
+
+    #[test]
+    fn transaction_row_does_not_convert_to_dispute() {
+        let input_row = InputRow {
+            transaction_type: "deposit".to_string(),
+            client: 1,
+            tx: 1,
+            amount: Some(12.into()),
+        };
+        let dispute_result: Result<DisputeAction, InputRowParseErr> = input_row.try_into();
+        dispute_result.expect_err("Parse from transaction into dispute was allowed");
+    }
+
+    #[test]
+    fn dispute_row_does_not_convert_to_transaction() {
+        let input_row = InputRow {
+            transaction_type: "dispute".to_string(),
+            client: 1,
+            tx: 1,
+            amount: None,
+        };
+        let transaction_result: Result<Transaction, InputRowParseErr> = input_row.try_into();
+        transaction_result.expect_err("Parse from dispute into transaction was allowed");
+    }
+
+    #[test]
+    fn account_converts_to_output_row() {
+        let account = Account {
+            available_balance: 100.into(),
+            held_balance: 10.into(),
+            id: 1,
+            is_frozen: false,
+            transactions: std::collections::HashMap::new()
+        };
+        let output_row: OutputRow = account.into();
+        assert_eq!(output_row.client, 1);
+        assert_eq!(output_row.available, 100.into());
+        assert_eq!(output_row.held, 10.into());
+        assert_eq!(output_row.total, 110.into());
+        assert_eq!(output_row.locked, false);
+    }
+
+    #[test]
+    fn account_frozen_status_becomes_locked_entry() {
+        let account = Account {
+            available_balance: 100.into(),
+            held_balance: 10.into(),
+            id: 1,
+            is_frozen: true,
+            transactions: std::collections::HashMap::new()
+        };
+        let output_row: OutputRow = account.into();
+        assert_eq!(output_row.client, 1);
+        assert_eq!(output_row.locked, true);
     }
 }
